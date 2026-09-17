@@ -1,0 +1,13 @@
+{
+  "name": "chess-server",
+  "module": "src/index.js",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "elysia": "^1.4.30"
+  }
+}
