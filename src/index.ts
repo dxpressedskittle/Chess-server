@@ -1,6 +1,16 @@
 import { Elysia, t } from 'elysia'
 import { isLegalMove } from './legalMove';
 
+type Piece = string | null
+type Board = Piece[]
+type Room = {
+    code: number;
+    client1: number;
+    client2?: number;
+    board: Board;
+    clientTurn: 1 | 2
+
+}
 const defaultBoard: Board = [
     "br",
     "bn",
@@ -100,29 +110,37 @@ const Server = new Elysia()
         message(ws, { room, client, message, data }) {
             if (!room || !client || !message || !data) return;
 
-            const roomCode = room.code;
+            const roomCode = room;
             const currentRoom = rooms.find(r => r.code === roomCode);
-            if (!currentRoom) return;
+            if (!currentRoom) {
+                ws.send({ error: `Room ${currentRoom} not found` })
+                return
+            };
+
+            const isClient1 = client === currentRoom.client1;
+            const isClient2 = client === currentRoom.client2;
+            if ((currentRoom.clientTurn === 1 && !isClient1) || (currentRoom.clientTurn === 2 && !isClient2)) {
+                ws.send({ error: "Not your turn" });
+                return;
+            }
+
             switch (message) {
                 case "move": {
                     // Example data format: "bkh3h4"
                     const move = data;
+                    const color = String(move[0])
                     const piece = String(move[1]);
 
-                    // Parse grid coordinates (Ensure indices match your data string)
                     const startRow = parseInt(move[2]!);
                     const startCol = parseInt(move[3]!);
                     const targetRow = parseInt(move[4]!);
                     const targetCol = parseInt(move[5]!);
 
-                    // Calculate matching board indices
                     const startIndex = findIndex(startRow, startCol);
-                    const targetIndex = findIndex(targetRow, targetCol); // Fixed reversed parameters
+                    const targetIndex = findIndex(targetRow, targetCol);
 
-                    // Validate move legality against the room's board state
                     if (isLegalMove(piece, startIndex, targetIndex, currentRoom.board)) {
                         console.log("Move is legal");
-                        // Insert code here to update currentRoom.board and broadcast the move
                     } else {
                         console.log("Illegal move attempted");
                     }
