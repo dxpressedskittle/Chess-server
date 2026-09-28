@@ -110,6 +110,7 @@ const Server = new Elysia()
         }),
 
         message(ws, { room, client, message, data }) {
+            console.log(message, data)
             if (!room || !client || !message || !data) return;
 
             const roomCode = room;
@@ -119,12 +120,18 @@ const Server = new Elysia()
                 return
             }
 
+            if (message === 'move') {
+                console.log(`[Move Received] Room: ${room} | Client: ${client} | Move: ${data}`);
+            }
+
+
             const isClient1 = client === currentRoom.client1;
             const isClient2 = client === currentRoom.client2;
             if ((currentRoom.clientTurn === 1 && !isClient1) || (currentRoom.clientTurn === 2 && !isClient2)) {
                 ws.send({ error: "Not your turn" });
                 return;
             }
+
 
             switch (message) {
                 case "move": {
@@ -152,7 +159,11 @@ const Server = new Elysia()
                     console.log("Unknown message type:", message);
                     break;
             }
+        },
+        error({ error }) {
+            console.error("WebSocket Error:", error);
         }
+
     })
 
     .post("/room", () => {
