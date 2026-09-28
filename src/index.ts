@@ -96,9 +96,11 @@ function findIndex(row: number, col: number) {
 function findPos(index: number) {
     const row = Math.floor(index / 8)
     const col = index % 8
+    return { row, col }
 }
 
 const Server = new Elysia()
+    .get("/", () => "Server is running!")
     .ws("/game", {
         body: t.Object({
             room: key,
@@ -113,9 +115,9 @@ const Server = new Elysia()
             const roomCode = room;
             const currentRoom = rooms.find(r => r.code === roomCode);
             if (!currentRoom) {
-                ws.send({ error: `Room ${currentRoom} not found` })
+                ws.send({ error: `Room ${room} not found` })
                 return
-            };
+            }
 
             const isClient1 = client === currentRoom.client1;
             const isClient2 = client === currentRoom.client2;
@@ -178,7 +180,9 @@ const Server = new Elysia()
     }, {
         body: key
     })
-    .listen(3000)
+    .listen(8080, ({ hostname="localhost", port=8080 }) => {
+        console.log(`Backend running at: http://${hostname}:${port}`);
+    });
 
 
 
