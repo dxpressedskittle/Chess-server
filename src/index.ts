@@ -166,21 +166,21 @@ const Server = new Elysia()
                 case "move": {
 
 
-                    const isClient1 = client === currentRoom.client1;
-                    const isClient2 = client === currentRoom.client2;
-                    console.log(client, currentRoom.client1)
-                    console.log(isClient1, currentRoom.clientTurn)
-                    if ((currentRoom.clientTurn === 1 && !isClient1)) { // fix
-                        const response = { error: "Not your turn" };
-                        ws.send(JSON.stringify(response));
-                        return;
-                    }
+
+                    
                     const move = data;
                     if (!/^[wb][prnbqk][0-7]{4}$/.test(move)) {
                         const response = { error: `Invalid move format: ${move}` }
                         console.log("[Server -> Client]", response)
                         ws.send(response)
                         return
+                    }
+
+                    const currentTurn = currentRoom.client1 === client ? 1 : currentRoom.client2 === client ? 2 : null; // flips turns
+                    if (currentTurn !== currentRoom.clientTurn) { 
+                        const response = { error: "Not your turn" };
+                        ws.send(JSON.stringify(response));
+                        return;
                     }
 
                     const piece = move.slice(0, 2)
@@ -190,6 +190,7 @@ const Server = new Elysia()
                     const targetRow = Number(move[4]);
                     const targetCol = Number(move[5]);
 
+                    if (currentRoom.client1 !== client || ) 
                     const startIndex = findIndex(startRow, startCol);
                     const targetIndex = findIndex(targetRow, targetCol);
                     const legal = isLegalMove(piece, startIndex, targetIndex, currentRoom.board) === true;
@@ -240,8 +241,10 @@ const Server = new Elysia()
         if (room && !room.client2) {
             const clientKey = randomInt()
             room.client2 = clientKey
-            return clientKey
+            const board = room.board.reverse() // reverse board for second player
+            return { key: clientKey, board: board }
         }
+        throw new Error("Could not join room")
     }, {
         body: key
     })
