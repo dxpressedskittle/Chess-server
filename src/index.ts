@@ -170,7 +170,7 @@ const Server = new Elysia()
                     const isClient2 = client === currentRoom.client2;
                     console.log(client, currentRoom.client1)
                     console.log(isClient1, currentRoom.clientTurn)
-                    if ((currentRoom.clientTurn === 1 && !isClient1)) {
+                    if ((currentRoom.clientTurn === 1 && !isClient1)) { // fix
                         const response = { error: "Not your turn" };
                         ws.send(JSON.stringify(response));
                         return;
