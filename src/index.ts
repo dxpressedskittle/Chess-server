@@ -1,16 +1,10 @@
 import { Elysia, t } from 'elysia'
+import { cors } from '@elysiajs/cors'
 import { isLegalMove } from './legalMove';
 
 type Piece = string | null
 type Board = Piece[]
-type Room = {
-    code: number;
-    client1: number;
-    client2?: number;
-    board: Board;
-    clientTurn: 1 | 2
 
-}
 const defaultBoard: Board = [
     "br",
     "bn",
@@ -89,7 +83,7 @@ function randomInt(): number {
 }
 
 function findIndex(row: number, col: number) {
-    const index = col * 8 + row
+    const index = row * 8 + col
     return index
 } // returns the row and col of a index on a specific board
 
@@ -100,7 +94,32 @@ function findPos(index: number) {
 }
 
 const Server = new Elysia()
+    .use(cors({
+        origin: "http://localhost:3000",
+        credentials: false,
+        methods: ["GET", "POST"],
+        allowedHeaders: ["Content-Type"]
+    }))
     .get("/", () => "Server is running!")
+    .get("/debug/rooms", ({ set }) => {
+        if (Bun.env.NODE_ENV === "production") {
+            set.status = 404
+            return { error: "Not found" }
+        }
+
+        const snapshot = rooms.map(room => ({
+            code: room.code,
+            board: [...room.board],
+            clientTurn: room.clientTurn,
+            playersJoined: {
+                client1: true,
+                client2: Boolean(room.client2)
+            }
+        }))
+
+        console.log("[Debug Rooms]", snapshot)
+        return snapshot
+    })
     .ws("/game", {
         body: t.Object({
             room: key,
@@ -110,13 +129,15 @@ const Server = new Elysia()
         }),
 
         message(ws, { room, client, message, data }) {
-            console.log(message, data)
+            console.log("[Client -> Server]", { room, client, message, data })
             if (!room || !client || !message || !data) return;
 
             const roomCode = room;
             const currentRoom = rooms.find(r => r.code === roomCode);
             if (!currentRoom) {
-                ws.send({ error: `Room ${room} not found` })
+                const response = { error: `Room ${room} not found` }
+                console.log("[Server -> Client]", response)
+                ws.send(response)
                 return
             }
 
@@ -128,31 +149,38 @@ const Server = new Elysia()
             const isClient1 = client === currentRoom.client1;
             const isClient2 = client === currentRoom.client2;
             if ((currentRoom.clientTurn === 1 && !isClient1) || (currentRoom.clientTurn === 2 && !isClient2)) {
-                ws.send({ error: "Not your turn" });
+                const response = { error: "Not your turn" }
+                console.log("[Server -> Client]", response)
+                ws.send(response)
                 return;
             }
 
 
             switch (message) {
                 case "move": {
-                    // Example data format: "bkh3h4"
                     const move = data;
-                    const color = String(move[0])
-                    const piece = String(move[1]);
+                    if (!/^[wb][prnbqk][0-7]{4}$/.test(move)) {
+                        const response = { error: `Invalid move format: ${move}` }
+                        console.log("[Server -> Client]", response)
+                        ws.send(response)
+                        return
+                    }
 
-                    const startRow = parseInt(move[2]!);
-                    const startCol = parseInt(move[3]!);
-                    const targetRow = parseInt(move[4]!);
-                    const targetCol = parseInt(move[5]!);
+                    const piece = move.slice(0, 2)
+
+                    const startRow = Number(move[2]);
+                    const startCol = Number(move[3]);
+                    const targetRow = Number(move[4]);
+                    const targetCol = Number(move[5]);
 
                     const startIndex = findIndex(startRow, startCol);
                     const targetIndex = findIndex(targetRow, targetCol);
+                    const legal = isLegalMove(piece, startIndex, targetIndex, currentRoom.board) === true;
 
-                    if (isLegalMove(piece, startIndex, targetIndex, currentRoom.board)) {
-                        console.log("Move is legal");
-                    } else {
-                        console.log("Illegal move attempted");
-                    }
+                    console.log(`[Move Validation] ${piece} ${startRow},${startCol} -> ${targetRow},${targetCol}: ${legal}`);
+                    const response = { legal }
+                    console.log("[Server -> Client]", response)
+                    ws.send(response)
                     break;
                 }
                 default:
@@ -173,7 +201,7 @@ const Server = new Elysia()
         const payload: Room = {
             code: roomCode,
             client1: clientKey,
-            board: defaultBoard,
+            board: [...defaultBoard],
             clientTurn: 1
         }
 
@@ -191,7 +219,7 @@ const Server = new Elysia()
     }, {
         body: key
     })
-    .listen(8080, ({ hostname="localhost", port=8080 }) => {
+    .listen(Number(Bun.env.PORT ?? 8080), ({ hostname="localhost", port=8080 }) => {
         console.log(`Backend running at: http://${hostname}:${port}`);
     });
 

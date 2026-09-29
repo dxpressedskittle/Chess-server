@@ -1,13 +1,4 @@
 export function isLegalMove(pieceString: string, startIndex: number, targetIndex: number, board: Board) {
-  const moveFunctions = {
-    p: isPawnLegalMove,
-    r: isRookLegalMove,
-    n: isKnightLegalMove,
-    b: isBishopLegalMove,
-    q: isQueenLegalMove,
-    k: isKingLegalMove,
-  };
-
   const piece = pieceString[1];
 
   let moveFunction;
