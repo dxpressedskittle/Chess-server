@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { html } from '@elysiajs/html'
 import { isLegalMove } from './legalMove';
 
 type Piece = string | null
@@ -100,7 +101,21 @@ const Server = new Elysia()
         methods: ["GET", "POST"],
         allowedHeaders: ["Content-Type"]
     }))
-    .get("/", () => "Server is running!")
+
+    .use(html())
+
+    .get("/rooms", () => {
+        return rooms.map(room => `
+      <div> 
+        ----------------------<br>
+        Room ID: ${room.code}<br>
+        Client 1: ${room.client1}<br>
+        Client 2: ${room.client2 || 'None'}<br>
+        Client turn: ${room.clientTurn}
+      </div> 
+    `).join(""); // maybe try further info on matches + players for server
+    })
+
     .get("/debug/rooms", ({ set }) => {
         if (Bun.env.NODE_ENV === "production") {
             set.status = 404
@@ -180,8 +195,24 @@ const Server = new Elysia()
                     console.log(`[Move Validation] ${piece} ${startRow},${startCol} -> ${targetRow},${targetCol}: ${legal}`);
                     const response = { legal }
                     console.log("[Server -> Client]", response)
+                    if (legal) {
+                        currentRoom.board[startIndex] = null
+                        currentRoom.board[targetIndex] = piece
+                    }
                     ws.send(response)
                     break;
+                }
+                case "reqBoard": {
+                    const room = data;
+                    const targetRoom = rooms[room];
+
+                    if (targetRoom && targetRoom.board) {
+                        const response = { type: "board", data: targetRoom.board };
+                        ws.send(JSON.stringify(response)); 
+                    } else {
+                        ws.send(JSON.stringify({ error: "Room or board not found" }));
+                    }
+                    break; // FIXED: Changed return to break
                 }
                 default:
                     console.log("Unknown message type:", message);
@@ -219,7 +250,7 @@ const Server = new Elysia()
     }, {
         body: key
     })
-    .listen(Number(Bun.env.PORT ?? 8080), ({ hostname="localhost", port=8080 }) => {
+    .listen(Number(Bun.env.PORT ?? 8080), ({ hostname = "localhost", port = 8080 }) => {
         console.log(`Backend running at: http://${hostname}:${port}`);
     });
 
