@@ -149,9 +149,9 @@ const Server = new Elysia()
 
             const roomCode = room;
             const currentRoom = rooms.find(r => r.code === roomCode);
+            console.log(room)
             if (!currentRoom) {
                 const response = { error: `Room ${room} not found` }
-                console.log("[Server -> Client]", response)
                 ws.send(response)
                 return
             }
@@ -161,18 +161,20 @@ const Server = new Elysia()
             }
 
 
-            const isClient1 = client === currentRoom.client1;
-            const isClient2 = client === currentRoom.client2;
-            if ((currentRoom.clientTurn === 1 && !isClient1) || (currentRoom.clientTurn === 2 && !isClient2)) {
-                const response = { error: "Not your turn" }
-                console.log("[Server -> Client]", response)
-                ws.send(response)
-                return;
-            }
-
 
             switch (message) {
                 case "move": {
+
+
+                    const isClient1 = client === currentRoom.client1;
+                    const isClient2 = client === currentRoom.client2;
+                    console.log(client, currentRoom.client1)
+                    console.log(isClient1, currentRoom.clientTurn)
+                    if ((currentRoom.clientTurn === 1 && !isClient1)) {
+                        const response = { error: "Not your turn" };
+                        ws.send(JSON.stringify(response));
+                        return;
+                    }
                     const move = data;
                     if (!/^[wb][prnbqk][0-7]{4}$/.test(move)) {
                         const response = { error: `Invalid move format: ${move}` }
@@ -202,17 +204,10 @@ const Server = new Elysia()
                     ws.send(response)
                     break;
                 }
-                case "reqBoard": {
-                    const room = data;
-                    const targetRoom = rooms[room];
-
-                    if (targetRoom && targetRoom.board) {
-                        const response = { type: "board", data: targetRoom.board };
-                        ws.send(JSON.stringify(response)); 
-                    } else {
-                        ws.send(JSON.stringify({ error: "Room or board not found" }));
-                    }
-                    break; // FIXED: Changed return to break
+                case "reqBoard": { // no need to check room
+                    const response = { type: "board", data: currentRoom.board };
+                    ws.send(JSON.stringify(response));
+                    break;
                 }
                 default:
                     console.log("Unknown message type:", message);
