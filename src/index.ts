@@ -1,76 +1,76 @@
 import { Elysia, t } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { html } from "@elysiajs/html";
-import { isLegalMove } from "./legalMove";
+import { isLegalMove, isPlayerInCheck } from "./legalMove";
 
 type Piece = string | null;
 type Board = Piece[];
 
 const defaultBoard: Board = [
-  "br",
-  "bn",
-  "bb",
-  "bq",
-  "bk",
-  "bb",
-  "bn",
-  "br",
-  "bp",
-  "bp",
-  "bp",
-  "bp",
-  "bp",
-  "bp",
-  "bp",
-  "bp",
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  null,
-  "wp",
-  "wp",
-  "wp",
-  "wp",
-  "wp",
-  "wp",
-  "wp",
-  "wp",
-  "wr",
-  "wn",
-  "wb",
-  "wq",
-  "wk",
-  "wb",
-  "wn",
-  "wr",
+    "br",
+    "bn",
+    "bb",
+    "bq",
+    "bk",
+    "bb",
+    "bn",
+    "br",
+    "bp",
+    "bp",
+    "bp",
+    "bp",
+    "bp",
+    "bp",
+    "bp",
+    "bp",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "wp",
+    "wp",
+    "wp",
+    "wp",
+    "wp",
+    "wp",
+    "wp",
+    "wp",
+    "wr",
+    "wn",
+    "wb",
+    "wq",
+    "wk",
+    "wb",
+    "wn",
+    "wr",
 ];
 
 const boards: Board[] = [];
@@ -79,36 +79,36 @@ const rooms: Room[] = [];
 const key = t.Number({ minimum: 10000, maximum: 100000 });
 
 function randomInt(): number {
-  return Math.floor(Math.random() * 90000) + 10000;
+    return Math.floor(Math.random() * 90000) + 10000;
 }
 
 function findIndex(row: number, col: number) {
-  const index = row * 8 + col;
-  return index;
+    const index = row * 8 + col;
+    return index;
 } // returns the row and col of a index on a specific board
 
 function findPos(index: number) {
-  const row = Math.floor(index / 8);
-  const col = index % 8;
-  return { row, col };
+    const row = Math.floor(index / 8);
+    const col = index % 8;
+    return { row, col };
 }
 
 const Server = new Elysia()
-  .use(
-    cors({
-      origin: "http://localhost:3000",
-      credentials: false,
-      methods: ["GET", "POST"],
-      allowedHeaders: ["Content-Type"],
-    }),
-  )
+    .use(
+        cors({
+            origin: "http://localhost:3000",
+            credentials: false,
+            methods: ["GET", "POST"],
+            allowedHeaders: ["Content-Type"],
+        }),
+    )
 
-  .use(html())
+    .use(html())
 
-  .get("/rooms", () => {
-    return rooms
-      .map(
-        (room) => `
+    .get("/rooms", () => {
+        return rooms
+            .map(
+                (room) => `
       <div> 
         ----------------------<br>
         Room ID: ${room.code}<br>
@@ -117,202 +117,233 @@ const Server = new Elysia()
         Client turn: ${room.clientTurn}
       </div> 
     `,
-      )
-      .join(""); // maybe try further info on matches + players for server
-  })
+            )
+            .join(""); // maybe try further info on matches + players for server
+    })
 
-  .get("/debug/rooms", ({ set }) => {
-    if (Bun.env.NODE_ENV === "production") {
-      set.status = 404;
-      return { error: "Not found" };
-    }
-
-    const snapshot = rooms.map((room) => ({
-      code: room.code,
-      board: [...room.board],
-      clientTurn: room.clientTurn,
-      playersJoined: {
-        client1: true,
-        client2: Boolean(room.client2),
-      },
-    }));
-
-    console.log("[Debug Rooms]", snapshot);
-    return snapshot;
-  })
-  .ws("/game", {
-    body: t.Object({
-      room: key,
-      client: key,
-      message: t.String(),
-      data: t.String(),
-    }),
-
-    message(ws, { room, client, message, data }) {
-      console.log("[Client -> Server]", { room, client, message, data });
-      if (!room || !client || !message || !data) return;
-
-      const roomCode = room;
-      const currentRoom = rooms.find((r) => r.code === roomCode);
-      console.log(room);
-      if (!currentRoom) {
-        const response = { error: `Room ${room} not found` };
-        ws.send(response);
-        return;
-      }
-
-      const isClient1 = currentRoom.client1 === client;
-      const isClient2 = currentRoom.client2 === client;
-      if (!isClient1 && !isClient2) {
-        ws.send({ error: "Client is not in this room" });
-        return;
-      }
-
-      const playerColor = isClient2 ? "b" : "w";
-      const roomTopic = `room:${roomCode}:${playerColor}`;
-      ws.subscribe(roomTopic);
-
-      if (message === "move") {
-        console.log(
-          `[Move Received] Room: ${room} | Client: ${client} | Move: ${data}`,
-        );
-      }
-
-      switch (message) {
-        case "move": {
-          const move = data;
-          if (!/^[wb][prnbqk][0-7]{4}$/.test(move)) {
-            const response = { error: `Invalid move format: ${move}` };
-            console.log("[Server -> Client]", response);
-            ws.send(response);
-            return;
-          }
-
-          if (
-            (isClient1 && currentRoom.clientTurn !== 1) ||
-            (isClient2 && currentRoom.clientTurn !== 2)
-          ) {
-            const response = { error: "Not your turn" };
-            ws.send(JSON.stringify(response));
-            return;
-          }
-
-          const piece = move.slice(0, 2);
-
-          const startRow = Number(move[2]);
-          const startCol = Number(move[3]);
-          const targetRow = Number(move[4]);
-          const targetCol = Number(move[5]);
-
-          if (piece[0] !== playerColor) {
-            const response = { error: "Cannot move opponents piece" };
-            ws.send(JSON.stringify(response));
-            return;
-          }
-
-          const localStartIndex = findIndex(startRow, startCol);
-          const localTargetIndex = findIndex(targetRow, targetCol);
-          const startIndex = isClient2 ? 63 - localStartIndex : localStartIndex;
-          const targetIndex = isClient2
-            ? 63 - localTargetIndex
-            : localTargetIndex;
-          const legal =
-            isLegalMove(piece, startIndex, targetIndex, currentRoom.board) ===
-            true;
-
-          console.log(
-            `[Move Validation] ${piece} ${startRow},${startCol} -> ${targetRow},${targetCol}: ${legal}`,
-          );
-          const response = { legal };
-          if (legal) {
-            currentRoom.board[startIndex] = null;
-            currentRoom.board[targetIndex] = piece;
-            currentRoom.clientTurn = currentRoom.clientTurn === 1 ? 2 : 1;
-            const whiteBoard = [...currentRoom.board];
-            const blackBoard = [...currentRoom.board].reverse();
-            ws.publish(
-              `room:${roomCode}:w`,
-              JSON.stringify({
-                type: "board",
-                data: whiteBoard,
-                playerColor: "w",
-                clientTurn: currentRoom.clientTurn,
-              }),
-            );
-            ws.publish(
-              `room:${roomCode}:b`,
-              JSON.stringify({
-                type: "board",
-                data: blackBoard,
-                playerColor: "b",
-                clientTurn: currentRoom.clientTurn,
-              }),
-            );
-          }
-
-          ws.send(response);
-          break;
+    .get("/debug/rooms", ({ set }) => {
+        if (Bun.env.NODE_ENV === "production") {
+            set.status = 404;
+            return { error: "Not found" };
         }
-        case "reqBoard": {
-          const requestedBoard = isClient2
-            ? [...currentRoom.board].reverse()
-            : [...currentRoom.board];
-          const response = {
-            type: "board",
-            data: requestedBoard,
-            playerColor,
-            clientTurn: currentRoom.clientTurn,
-          };
-          ws.send(JSON.stringify(response));
-          break;
-        }
-        default:
-          console.log("Unknown message type:", message);
-          break;
-      }
-    },
-    error({ error }) {
-      console.error("WebSocket Error:", error);
-    },
-  })
 
-  .post("/room", () => {
-    const roomCode = randomInt();
-    const clientKey = randomInt();
+        const snapshot = rooms.map((room) => ({
+            code: room.code,
+            board: [...room.board],
+            clientTurn: room.clientTurn,
+            playersJoined: {
+                client1: true,
+                client2: Boolean(room.client2),
+            },
+        }));
 
-    const payload: Room = {
-      code: roomCode,
-      client1: clientKey,
-      board: [...defaultBoard],
-      clientTurn: 1,
-    };
+        console.log("[Debug Rooms]", snapshot);
+        return snapshot;
+    })
+    .ws("/game", {
+        body: t.Object({
+            room: key,
+            client: key,
+            message: t.String(),
+            data: t.String(),
+        }),
 
-    rooms.push(payload);
-    return payload;
-  })
+        message(ws, { room, client, message, data }) {
+            console.log("[Client -> Server]", { room, client, message, data });
+            if (!room || !client || !message || !data) return;
 
-  .post(
-    "/join",
-    ({ body }) => {
-      const room = rooms.find((room) => room.code === body);
-      if (room && !room.client2) {
+            const roomCode = room;
+            const currentRoom = rooms.find((r) => r.code === roomCode);
+            console.log(room);
+            if (!currentRoom) {
+                const response = { error: `Room ${room} not found` };
+                ws.send(response);
+                return;
+            }
+
+            const isClient1 = currentRoom.client1 === client;
+            const isClient2 = currentRoom.client2 === client;
+            if (!isClient1 && !isClient2) {
+                ws.send({ error: "Client is not in this room" });
+                return;
+            }
+
+            const playerColor = isClient2 ? "b" : "w";
+            const roomTopic = `room:${roomCode}:${playerColor}`;
+            ws.subscribe(roomTopic);
+
+            if (message === "move") {
+                console.log(
+                    `[Move Received] Room: ${room} | Client: ${client} | Move: ${data}`,
+                );
+            }
+
+            switch (message) {
+                case "move": {
+                    const move = data;
+                    if (!/^[wb][prnbqk][0-7]{4}$/.test(move)) {
+                        const response = { error: `Invalid move format: ${move}` };
+                        console.log("[Server -> Client]", response);
+                        ws.send(response);
+                        return;
+                    }
+
+                    if (
+                        (isClient1 && currentRoom.clientTurn !== 1) ||
+                        (isClient2 && currentRoom.clientTurn !== 2)
+                    ) {
+                        const response = { error: "Not your turn" };
+                        ws.send(JSON.stringify(response));
+                        return;
+                    }
+
+                    const piece = move.slice(0, 2);
+                    const enemyColor = piece[0] === "w" ? "b" : "w"
+
+                    const startRow = Number(move[2]);
+                    const startCol = Number(move[3]);
+                    const targetRow = Number(move[4]);
+                    const targetCol = Number(move[5]);
+
+                    if (piece[0] !== playerColor) {
+                        const response = { error: "Cannot move opponents piece" };
+                        ws.send(JSON.stringify(response));
+                        return;
+                    }
+
+                    const localStartIndex = findIndex(startRow, startCol);
+                    const localTargetIndex = findIndex(targetRow, targetCol);
+                    const startIndex = isClient2 ? 63 - localStartIndex : localStartIndex;
+                    const targetIndex = isClient2 ? 63 - localTargetIndex : localTargetIndex;
+                    const legal = isLegalMove(piece, startIndex, targetIndex, currentRoom.board) === true;
+
+                    console.log(
+                        `[Move Validation] ${piece} ${startRow},${startCol} -> ${targetRow},${targetCol}: ${legal}`,
+                    );
+                    const response = { legal };
+                    if (legal) {
+
+                        if (isPlayerInCheck(piece[0], currentRoom.board)) {
+                            const response = {error: "Move out of check first" }
+                            ws.send(JSON.stringify(response))
+                        }
+
+                        const tempPiece: string | null = currentRoom.board[targetIndex]; // ?????
+
+                        currentRoom.board[startIndex] = null;
+                        currentRoom.board[targetIndex] = piece;
+
+                        if (isPlayerInCheck(piece[0], currentRoom.board)) { // if move puts the client in check dont allow it
+                            currentRoom.board[startIndex] = piece
+                            currentRoom.board[targetIndex] = tempPiece
+
+                            const response = { error: "Cannot move into check" }
+                            ws.send(JSON.stringify(response))
+
+                            break
+                        } 
+                        
+                        if (isPlayerInCheck(enemyColor, currentRoom.board)) { // enemy in check
+                            ws.publish("check", JSON.stringify({check: true, color: enemyColor}))
+                        } 
+
+                        currentRoom.clientTurn = currentRoom.clientTurn === 1 ? 2 : 1;
+
+                        const whiteBoard = [...currentRoom.board];
+                        const blackBoard = [...currentRoom.board].reverse();
+
+                        ws.publish(
+                            `room:${roomCode}:w`,
+                            JSON.stringify({
+                                type: "board",
+                                data: whiteBoard,
+                                playerColor: "w",
+                                clientTurn: currentRoom.clientTurn,
+                            }),
+                        );
+
+                        ws.publish(
+                            `room:${roomCode}:b`,
+                            JSON.stringify({
+                                type: "board",
+                                data: blackBoard,
+                                playerColor: "b",
+                                clientTurn: currentRoom.clientTurn,
+                            }),
+                        );
+                    }
+
+                    ws.send(response);
+                    break;
+                }
+                case "reqBoard": {
+
+                    const requestedBoard = isClient2
+                        ? [...currentRoom.board].reverse()
+                        : [...currentRoom.board];
+
+                    const response = {
+                        type: "board",
+                        data: requestedBoard,
+                        playerColor,
+                        clientTurn: currentRoom.clientTurn,
+                    };
+
+                    ws.send(JSON.stringify(response));
+                    break;
+                }
+                default:
+                    console.log("Unknown message type:", message);
+                    break;
+            }
+        },
+        error({ error }) {
+            console.error("WebSocket Error:", error);
+        },
+    })
+
+    .post("/room", () => {
+
+        const roomCode = randomInt();
         const clientKey = randomInt();
-        room.client2 = clientKey;
-        return {
-          key: clientKey,
-          board: [...room.board].reverse(),
-          playerColor: "b",
+
+        const payload: Room = {
+            code: roomCode,
+            client1: clientKey,
+            board: [...defaultBoard],
+            clientTurn: 1,
         };
-      }
-      throw new Error("Could not join room");
-    },
-    {
-      body: key,
-    },
-  )
-  .listen(
-    Number(Bun.env.PORT ?? 8080),
-    ({ hostname = "localhost", port = 8080 }) => {
-      console.log(`Backend running at: http://${hostname}:${port}`);
-    },
-  );
+
+        rooms.push(payload);
+        return payload;
+    })
+
+    .post(
+        "/join",
+        ({ body }) => {
+
+            const room = rooms.find((room) => room.code === body);
+
+            if (room && !room.client2) {
+
+                const clientKey = randomInt();
+                room.client2 = clientKey;
+
+                return {
+                    key: clientKey,
+                    board: [...room.board].reverse(),
+                    playerColor: "b",
+                };
+            }
+            throw new Error("Could not join room");
+        },
+        {
+            body: key,
+        },
+    )
+    .listen(
+        Number(Bun.env.PORT ?? 8080),
+        ({ hostname = "localhost", port = 8080 }) => {
+            console.log(`Backend running at: http://${hostname}:${port}`);
+        },
+    );
